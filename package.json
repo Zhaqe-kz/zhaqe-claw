@@ -1,0 +1,11 @@
+{
+  "name": "visionplay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phone-first gesture gaming prototype",
+  "scripts": {
+    "dev": "echo 'App scaffold ready. Frontend setup next.'",
+    "build": "echo 'Build pipeline not configured yet.'",
+    "start": "echo 'Runtime not configured yet.'"
+  }
+}
