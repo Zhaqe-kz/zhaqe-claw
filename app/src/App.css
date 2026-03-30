@@ -21,6 +21,12 @@ button {
   font: inherit;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .shell {
   min-height: 100vh;
   padding: 24px;
@@ -168,6 +174,10 @@ h1 {
   background: #3cf29e;
 }
 
+.dot.error {
+  background: #ff5d73;
+}
+
 .camera-view {
   position: relative;
   aspect-ratio: 9 / 16;
@@ -179,9 +189,26 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.camera-feed,
+.video-shade,
 .grid {
   position: absolute;
   inset: 0;
+}
+
+.camera-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  background: #0b1020;
+}
+
+.video-shade {
+  background: linear-gradient(180deg, rgba(8, 10, 18, 0.12), rgba(8, 10, 18, 0.48));
+}
+
+.grid {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
@@ -201,10 +228,11 @@ h1 {
   left: 38%;
   transform: translate(-50%, -50%);
   transition: top 280ms ease, left 280ms ease, opacity 200ms ease;
-  opacity: 0.2;
+  opacity: 0.12;
 }
 
-.hand-marker.camera-ready {
+.hand-marker.camera-ready,
+.hand-marker.starting-camera {
   opacity: 0.55;
 }
 
@@ -212,6 +240,12 @@ h1 {
   opacity: 1;
   top: 36%;
   left: 62%;
+}
+
+.hand-marker.error {
+  opacity: 0.4;
+  border-color: rgba(255, 99, 132, 0.85);
+  box-shadow: 0 0 40px rgba(255, 82, 124, 0.28);
 }
 
 .hud {
