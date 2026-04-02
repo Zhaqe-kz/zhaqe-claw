@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HandLandmarkerResult } from '@mediapipe/tasks-vision'
 import './App.css'
+import { clampTrail, estimateSwipe, type TrailPoint } from './lib/gesture'
 import { getHandLandmarker, getPrimaryPoint } from './lib/handTracking'
 
 type TrackingState =
@@ -35,6 +36,8 @@ function App() {
     handsDetected: 0,
     fpsHint: '—',
     modelReady: false,
+    slashReady: false,
+    swipeSpeed: 0,
   })
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -42,6 +45,7 @@ function App() {
   const streamRef = useRef<MediaStream | null>(null)
   const animationRef = useRef<number | null>(null)
   const lastVideoTimeRef = useRef(-1)
+  const trailRef = useRef<TrailPoint[]>([])
 
   useEffect(() => {
     return () => {
@@ -57,8 +61,24 @@ function App() {
     width: number,
     height: number,
     result: HandLandmarkerResult,
+    trail: TrailPoint[],
   ) => {
     ctx.clearRect(0, 0, width, height)
+
+    if (trail.length > 1) {
+      ctx.beginPath()
+      ctx.lineWidth = 6
+      ctx.lineCap = 'round'
+      ctx.strokeStyle = 'rgba(0, 214, 255, 0.75)'
+      trail.forEach((point, index) => {
+        if (index === 0) {
+          ctx.moveTo(point.x, point.y)
+        } else {
+          ctx.lineTo(point.x, point.y)
+        }
+      })
+      ctx.stroke()
+    }
 
     const landmarks = result.landmarks[0]
     if (!landmarks?.length) return
@@ -110,21 +130,41 @@ function App() {
             lastVideoTimeRef.current = video.currentTime
 
             const result = handLandmarker.detectForVideo(video, performance.now())
-            drawLandmarks(ctx, width, height, result)
-
             const primaryPoint = getPrimaryPoint(result)
-            setTrackingMeta({
-              handsDetected: result.handednesses.length,
-              fpsHint: 'live',
-              modelReady: true,
-            })
 
             if (primaryPoint) {
+              const mappedX = (1 - primaryPoint.x) * width
+              const mappedY = primaryPoint.y * height
+              trailRef.current = clampTrail(
+                [...trailRef.current, { x: mappedX, y: mappedY, t: performance.now() }],
+                10,
+              )
+
+              const swipe = estimateSwipe(trailRef.current)
+
               setMarkerPoint({
                 x: (1 - primaryPoint.x) * 100,
                 y: primaryPoint.y * 100,
               })
+
+              setTrackingMeta({
+                handsDetected: result.handednesses.length,
+                fpsHint: 'live',
+                modelReady: true,
+                slashReady: swipe.isSlash,
+                swipeSpeed: Math.round(swipe.speed),
+              })
+            } else {
+              trailRef.current = []
+              setTrackingMeta((prev) => ({
+                ...prev,
+                handsDetected: 0,
+                slashReady: false,
+                swipeSpeed: 0,
+              }))
             }
+
+            drawLandmarks(ctx, width, height, result, trailRef.current)
           }
         }
 
@@ -206,11 +246,17 @@ function App() {
           hint: 'MediaPipe инициализируется локально в браузере.',
         }
       case 'tracking':
-        return {
-          label: 'Tracking активен',
-          tone: 'live',
-          hint: 'Вижу руку — дальше добавим slash trail и hit detection.',
-        }
+        return trackingMeta.slashReady
+          ? {
+              label: 'Slash detected',
+              tone: 'live',
+              hint: 'Скорость руки достаточна для удара. Следом добавим hit logic.',
+            }
+          : {
+              label: 'Tracking активен',
+              tone: 'live',
+              hint: 'Вижу руку — теперь уже считаем скорость и swipe.',
+            }
       case 'error':
         return {
           label: 'Ошибка',
@@ -218,7 +264,7 @@ function App() {
           hint: camera.error ?? 'Не удалось поднять tracking.',
         }
     }
-  }, [trackingState, camera.error])
+  }, [trackingState, camera.error, trackingMeta.slashReady])
 
   return (
     <main className="shell">
@@ -227,8 +273,8 @@ function App() {
           <span className="eyebrow">VisionPlay / Prototype</span>
           <h1>Игры жестами. Phone-first.</h1>
           <p className="lead">
-            Теперь тут уже не просто camera preview — подключаем live hand tracking
-            на устройстве через MediaPipe.
+            Теперь прототип уже не только видит руку, но и считает динамику жеста:
+            trail, скорость и базовый slash signal.
           </p>
 
           <div className="cta-row">
@@ -247,7 +293,7 @@ function App() {
           <ul className="feature-list">
             <li>Phone-first gameplay</li>
             <li>Live camera preview</li>
-            <li>On-device MediaPipe tracking</li>
+            <li>Trail + slash signal detection</li>
           </ul>
         </div>
 
@@ -261,7 +307,7 @@ function App() {
               </div>
             </div>
 
-            <div className="camera-view">
+            <div className={`camera-view ${trackingMeta.slashReady ? 'slash-active' : ''}`}>
               <video ref={videoRef} className="camera-feed" autoPlay playsInline muted />
               <canvas ref={canvasRef} className="tracking-canvas" />
               <div className="video-shade"></div>
@@ -274,12 +320,10 @@ function App() {
                 Hands: {trackingMeta.handsDetected || 0}
               </div>
               <div className="hud top-right">
-                Model: {trackingMeta.modelReady ? 'ready' : 'offline'}
+                Slash: {trackingMeta.slashReady ? 'yes' : 'no'}
               </div>
               <div className="hud bottom-left">
-                {camera.granted
-                  ? `${camera.width || '—'} × ${camera.height || '—'}`
-                  : 'Camera offline'}
+                Speed: {trackingMeta.swipeSpeed}px/s
               </div>
               <div className="hud bottom-right">
                 {trackingState === 'tracking'
@@ -296,19 +340,19 @@ function App() {
           <h2>Что уже есть</h2>
           <ul>
             <li>Live camera permission flow</li>
-            <li>MediaPipe loader</li>
-            <li>Canvas overlay for landmarks</li>
-            <li>Tracked point from index finger tip</li>
+            <li>MediaPipe hand tracking</li>
+            <li>Canvas overlay + trail</li>
+            <li>Velocity-based slash signal</li>
           </ul>
         </article>
 
         <article className="panel">
           <h2>Следующий билд</h2>
           <ul>
-            <li>Motion smoothing</li>
-            <li>Slash trail</li>
-            <li>Velocity-based hit logic</li>
-            <li>Spawnable targets</li>
+            <li>Сглаживание и debounce slash</li>
+            <li>Target spawning</li>
+            <li>Hit detection against trail</li>
+            <li>Score + feedback loop</li>
           </ul>
         </article>
       </section>
