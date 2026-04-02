@@ -3,6 +3,7 @@ import type { HandLandmarkerResult } from '@mediapipe/tasks-vision'
 import './App.css'
 import { clampTrail, estimateSwipe, type TrailPoint } from './lib/gesture'
 import { getHandLandmarker, getPrimaryPoint } from './lib/handTracking'
+import { countHits, createTargets, detectHits, type Target } from './lib/targets'
 
 type TrackingState =
   | 'idle'
@@ -32,12 +33,14 @@ function App() {
     height: 0,
   })
   const [markerPoint, setMarkerPoint] = useState<MarkerPoint>({ x: 38, y: 62 })
+  const [targets, setTargets] = useState<Target[]>([])
   const [trackingMeta, setTrackingMeta] = useState({
     handsDetected: 0,
     fpsHint: '—',
     modelReady: false,
     slashReady: false,
     swipeSpeed: 0,
+    score: 0,
   })
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -56,14 +59,25 @@ function App() {
     }
   }, [])
 
-  const drawLandmarks = (
+  const drawScene = (
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
     result: HandLandmarkerResult,
     trail: TrailPoint[],
+    sceneTargets: Target[],
   ) => {
     ctx.clearRect(0, 0, width, height)
+
+    sceneTargets.forEach((target) => {
+      ctx.beginPath()
+      ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2)
+      ctx.fillStyle = target.hit ? 'rgba(56, 239, 125, 0.38)' : 'rgba(255, 180, 70, 0.28)'
+      ctx.fill()
+      ctx.lineWidth = 3
+      ctx.strokeStyle = target.hit ? 'rgba(56, 239, 125, 0.95)' : 'rgba(255, 196, 107, 0.95)'
+      ctx.stroke()
+    })
 
     if (trail.length > 1) {
       ctx.beginPath()
@@ -97,6 +111,15 @@ function App() {
     })
   }
 
+  const resetTargets = () => {
+    const video = videoRef.current
+    const width = video?.videoWidth || 720
+    const height = video?.videoHeight || 1280
+    const nextTargets = createTargets(width, height)
+    setTargets(nextTargets)
+    setTrackingMeta((prev) => ({ ...prev, score: 0 }))
+  }
+
   const startTracking = async () => {
     try {
       const video = videoRef.current
@@ -126,11 +149,18 @@ function App() {
             canvas.height = height
           }
 
+          if (targets.length === 0) {
+            setTargets(createTargets(width, height))
+          }
+
           if (video.currentTime !== lastVideoTimeRef.current) {
             lastVideoTimeRef.current = video.currentTime
 
             const result = handLandmarker.detectForVideo(video, performance.now())
             const primaryPoint = getPrimaryPoint(result)
+            let slashReady = false
+            let swipeSpeed = 0
+            let nextTargets = targets
 
             if (primaryPoint) {
               const mappedX = (1 - primaryPoint.x) * width
@@ -141,6 +171,14 @@ function App() {
               )
 
               const swipe = estimateSwipe(trailRef.current)
+              slashReady = swipe.isSlash
+              swipeSpeed = Math.round(swipe.speed)
+
+              nextTargets = detectHits(targets, trailRef.current, slashReady)
+              const score = countHits(nextTargets)
+              if (score !== countHits(targets)) {
+                setTargets(nextTargets)
+              }
 
               setMarkerPoint({
                 x: (1 - primaryPoint.x) * 100,
@@ -151,8 +189,9 @@ function App() {
                 handsDetected: result.handednesses.length,
                 fpsHint: 'live',
                 modelReady: true,
-                slashReady: swipe.isSlash,
-                swipeSpeed: Math.round(swipe.speed),
+                slashReady,
+                swipeSpeed,
+                score,
               })
             } else {
               trailRef.current = []
@@ -164,7 +203,7 @@ function App() {
               }))
             }
 
-            drawLandmarks(ctx, width, height, result, trailRef.current)
+            drawScene(ctx, width, height, result, trailRef.current, nextTargets)
           }
         }
 
@@ -211,6 +250,7 @@ function App() {
         width: video.videoWidth,
         height: video.videoHeight,
       })
+      setTargets(createTargets(video.videoWidth || 720, video.videoHeight || 1280))
       setTrackingState('camera-ready')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown camera error'
@@ -250,12 +290,12 @@ function App() {
           ? {
               label: 'Slash detected',
               tone: 'live',
-              hint: 'Скорость руки достаточна для удара. Следом добавим hit logic.',
+              hint: 'Уже можно поражать цели траекторией руки.',
             }
           : {
               label: 'Tracking активен',
               tone: 'live',
-              hint: 'Вижу руку — теперь уже считаем скорость и swipe.',
+              hint: 'Вижу руку — двигайся быстрее, чтобы рубить цели.',
             }
       case 'error':
         return {
@@ -273,8 +313,8 @@ function App() {
           <span className="eyebrow">VisionPlay / Prototype</span>
           <h1>Игры жестами. Phone-first.</h1>
           <p className="lead">
-            Теперь прототип уже не только видит руку, но и считает динамику жеста:
-            trail, скорость и базовый slash signal.
+            Уже есть первый playable loop: рука, trail, slash signal и цели,
+            которые можно сбивать движением руки.
           </p>
 
           <div className="cta-row">
@@ -288,12 +328,15 @@ function App() {
             >
               Запустить hand tracking
             </button>
+            <button className="secondary" onClick={resetTargets} disabled={!camera.granted}>
+              Сбросить цели
+            </button>
           </div>
 
           <ul className="feature-list">
             <li>Phone-first gameplay</li>
-            <li>Live camera preview</li>
             <li>Trail + slash signal detection</li>
+            <li>Targets + score loop</li>
           </ul>
         </div>
 
@@ -320,14 +363,14 @@ function App() {
                 Hands: {trackingMeta.handsDetected || 0}
               </div>
               <div className="hud top-right">
-                Slash: {trackingMeta.slashReady ? 'yes' : 'no'}
+                Score: {trackingMeta.score}/{targets.length}
               </div>
               <div className="hud bottom-left">
                 Speed: {trackingMeta.swipeSpeed}px/s
               </div>
               <div className="hud bottom-right">
                 {trackingState === 'tracking'
-                  ? `Tracking ${trackingMeta.fpsHint}`
+                  ? `Slash ${trackingMeta.slashReady ? 'ready' : 'waiting'}`
                   : 'Cast optional'}
               </div>
             </div>
@@ -342,7 +385,7 @@ function App() {
             <li>Live camera permission flow</li>
             <li>MediaPipe hand tracking</li>
             <li>Canvas overlay + trail</li>
-            <li>Velocity-based slash signal</li>
+            <li>Targets, hits and score</li>
           </ul>
         </article>
 
@@ -350,9 +393,9 @@ function App() {
           <h2>Следующий билд</h2>
           <ul>
             <li>Сглаживание и debounce slash</li>
-            <li>Target spawning</li>
-            <li>Hit detection against trail</li>
-            <li>Score + feedback loop</li>
+            <li>Анимация появления целей</li>
+            <li>Feedback effects on hit</li>
+            <li>Полный Fruit Ninja-like loop</li>
           </ul>
         </article>
       </section>
