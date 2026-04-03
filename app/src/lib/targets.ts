@@ -9,17 +9,27 @@ export type Target = {
   hitAt?: number
 }
 
-export function createTargets(width: number, height: number): Target[] {
+export function createTargets(width: number, height: number, count = 3): Target[] {
   const safeWidth = Math.max(width, 320)
   const safeHeight = Math.max(height, 480)
 
-  return [0, 1, 2].map((index) => ({
-    id: index + 1,
-    x: safeWidth * (0.22 + index * 0.28),
-    y: safeHeight * (0.3 + (index % 2) * 0.2),
-    radius: 48,
+  return Array.from({ length: count }, (_, index) => ({
+    id: Date.now() + index,
+    x: safeWidth * (0.18 + Math.random() * 0.64),
+    y: safeHeight * (0.22 + Math.random() * 0.46),
+    radius: 44,
     hit: false,
   }))
+}
+
+export function respawnTarget(width: number, height: number): Target {
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    x: Math.max(width, 320) * (0.18 + Math.random() * 0.64),
+    y: Math.max(height, 480) * (0.22 + Math.random() * 0.46),
+    radius: 44,
+    hit: false,
+  }
 }
 
 export function detectHits(targets: Target[], trail: TrailPoint[], slashReady: boolean) {
@@ -31,13 +41,9 @@ export function detectHits(targets: Target[], trail: TrailPoint[], slashReady: b
     const touched = trail.some((point) => {
       const dx = point.x - target.x
       const dy = point.y - target.y
-      return Math.hypot(dx, dy) <= target.radius * 1.25
+      return Math.hypot(dx, dy) <= target.radius * 1.3
     })
 
     return touched ? { ...target, hit: true, hitAt: Date.now() } : target
   })
-}
-
-export function countHits(targets: Target[]) {
-  return targets.filter((target) => target.hit).length
 }

@@ -3,7 +3,7 @@ import type { HandLandmarkerResult } from '@mediapipe/tasks-vision'
 import './App.css'
 import { clampTrail, estimateSwipe, type TrailPoint } from './lib/gesture'
 import { getHandLandmarker, getPrimaryPoint } from './lib/handTracking'
-import { countHits, createTargets, detectHits, type Target } from './lib/targets'
+import { createTargets, detectHits, respawnTarget, type Target } from './lib/targets'
 
 type TrackingState =
   | 'idle'
@@ -125,8 +125,7 @@ function App() {
     const video = videoRef.current
     const width = video?.videoWidth || 720
     const height = video?.videoHeight || 1280
-    const nextTargets = createTargets(width, height)
-    setTargets(nextTargets)
+    setTargets(createTargets(width, height))
     setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
   }
 
@@ -184,12 +183,19 @@ function App() {
               slashReady = swipe.isSlash
               swipeSpeed = Math.round(swipe.speed)
 
-              nextTargets = detectHits(targets, trailRef.current, slashReady)
-              const score = countHits(nextTargets)
-              const previousScore = countHits(targets)
-              const didHit = score !== previousScore
+              const hitScannedTargets = detectHits(targets, trailRef.current, slashReady)
+              const previousHits = targets.filter((target) => target.hit).length
+              const nextHits = hitScannedTargets.filter((target) => target.hit).length
+              const didHit = nextHits > previousHits
 
-              if (didHit) {
+              nextTargets = hitScannedTargets.map((target) => {
+                if (target.hit && target.hitAt && Date.now() - target.hitAt > 260) {
+                  return respawnTarget(width, height)
+                }
+                return target
+              })
+
+              if (didHit || nextTargets !== targets) {
                 setTargets(nextTargets)
               }
 
@@ -198,15 +204,15 @@ function App() {
                 y: primaryPoint.y * 100,
               })
 
-              setTrackingMeta({
+              setTrackingMeta((prev) => ({
                 handsDetected: result.handednesses.length,
                 fpsHint: 'live',
                 modelReady: true,
                 slashReady,
                 swipeSpeed,
-                score,
-                lastHitAt: didHit ? Date.now() : trackingMeta.lastHitAt,
-              })
+                score: didHit ? prev.score + 1 : prev.score,
+                lastHitAt: didHit ? Date.now() : prev.lastHitAt,
+              }))
             } else {
               trailRef.current = []
               setTrackingMeta((prev) => ({
@@ -272,6 +278,7 @@ function App() {
         height: video.videoHeight,
       })
       setTargets(createTargets(video.videoWidth || 720, video.videoHeight || 1280))
+      setTrackingMeta((prev) => ({ ...prev, score: 0 }))
       setTrackingState('camera-ready')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown camera error'
@@ -317,7 +324,7 @@ function App() {
           ? {
               label: 'РУБИ СЕЙЧАС',
               tone: 'live',
-              hint: 'Быстрый взмах рукой через цель даёт попадание.',
+              hint: 'Быстрый взмах рукой через цель даёт +1, затем цель появляется в новом месте.',
             }
           : {
               label: 'Tracking активен',
@@ -342,8 +349,8 @@ function App() {
           <span className="eyebrow">VisionPlay / Prototype</span>
           <h1>Игры жестами. Phone-first.</h1>
           <p className="lead">
-            Теперь удар делать проще: задняя камера, более щедрый hitbox и более
-            понятный feedback на попадание.
+            Теперь счёт event-based, цели респавнятся в новых местах, а большой
+            кружок — это просто маркер твоей руки, чтобы было видно, где система видит палец.
           </p>
 
           <div className="cta-row">
@@ -366,9 +373,9 @@ function App() {
           </div>
 
           <ul className="feature-list">
-            <li>По умолчанию старт с задней камеры</li>
-            <li>Быстрый взмах рукой через цель = hit</li>
-            <li>Больше hitbox и лучше feedback</li>
+            <li>Счёт теперь не сбрасывается после +1</li>
+            <li>Цели появляются в новых местах</li>
+            <li>Большой круг = маркер руки, не цель</li>
           </ul>
         </div>
 
@@ -397,7 +404,7 @@ function App() {
                 Hands: {trackingMeta.handsDetected || 0}
               </div>
               <div className="hud top-right">
-                Score: {trackingMeta.score}/{targets.length}
+                Score: {trackingMeta.score}
               </div>
               <div className="hud bottom-left">
                 Speed: {trackingMeta.swipeSpeed}px/s
@@ -421,7 +428,7 @@ function App() {
             <li>Live camera permission flow</li>
             <li>MediaPipe hand tracking</li>
             <li>Canvas overlay + trail</li>
-            <li>Targets, hits and score</li>
+            <li>Event-based score + respawn targets</li>
           </ul>
         </article>
 
@@ -430,8 +437,8 @@ function App() {
           <ul>
             <li>Включи камеру</li>
             <li>Запусти hand tracking</li>
-            <li>Наведи руку в кадр</li>
-            <li>Быстро проведи рукой через цель</li>
+            <li>Большой круг = твоя рука</li>
+            <li>Быстро проведи рукой через маленькие цели</li>
           </ul>
         </article>
       </section>
