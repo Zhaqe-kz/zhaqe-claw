@@ -130,6 +130,26 @@ h1 {
   line-height: 1.9;
 }
 
+.instruction-box {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(240, 245, 255, 0.92);
+}
+
+.instruction-box strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.instruction-box ol {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.85;
+}
+
 .phone-stage {
   display: flex;
   align-items: center;
