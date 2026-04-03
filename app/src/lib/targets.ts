@@ -6,6 +6,7 @@ export type Target = {
   y: number
   radius: number
   hit: boolean
+  hitAt?: number
 }
 
 export function createTargets(width: number, height: number): Target[] {
@@ -14,9 +15,9 @@ export function createTargets(width: number, height: number): Target[] {
 
   return [0, 1, 2].map((index) => ({
     id: index + 1,
-    x: safeWidth * (0.25 + index * 0.25),
-    y: safeHeight * (0.32 + (index % 2) * 0.18),
-    radius: 34,
+    x: safeWidth * (0.22 + index * 0.28),
+    y: safeHeight * (0.3 + (index % 2) * 0.2),
+    radius: 48,
     hit: false,
   }))
 }
@@ -30,10 +31,10 @@ export function detectHits(targets: Target[], trail: TrailPoint[], slashReady: b
     const touched = trail.some((point) => {
       const dx = point.x - target.x
       const dy = point.y - target.y
-      return Math.hypot(dx, dy) <= target.radius
+      return Math.hypot(dx, dy) <= target.radius * 1.25
     })
 
-    return touched ? { ...target, hit: true } : target
+    return touched ? { ...target, hit: true, hitAt: Date.now() } : target
   })
 }
 

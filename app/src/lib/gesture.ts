@@ -23,6 +23,6 @@ export function estimateSwipe(points: TrailPoint[]) {
 
   return {
     speed,
-    isSlash: speed > 420,
+    isSlash: speed > 260,
   }
 }

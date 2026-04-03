@@ -25,8 +25,11 @@ type MarkerPoint = {
   y: number
 }
 
+type CameraFacing = 'user' | 'environment'
+
 function App() {
   const [trackingState, setTrackingState] = useState<TrackingState>('idle')
+  const [cameraFacing, setCameraFacing] = useState<CameraFacing>('environment')
   const [camera, setCamera] = useState<CameraState>({
     granted: false,
     width: 0,
@@ -41,6 +44,7 @@ function App() {
     slashReady: false,
     swipeSpeed: 0,
     score: 0,
+    lastHitAt: 0,
   })
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -72,18 +76,24 @@ function App() {
     sceneTargets.forEach((target) => {
       ctx.beginPath()
       ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2)
-      ctx.fillStyle = target.hit ? 'rgba(56, 239, 125, 0.38)' : 'rgba(255, 180, 70, 0.28)'
+      ctx.fillStyle = target.hit ? 'rgba(56, 239, 125, 0.5)' : 'rgba(255, 180, 70, 0.34)'
       ctx.fill()
-      ctx.lineWidth = 3
-      ctx.strokeStyle = target.hit ? 'rgba(56, 239, 125, 0.95)' : 'rgba(255, 196, 107, 0.95)'
+      ctx.lineWidth = 4
+      ctx.strokeStyle = target.hit ? 'rgba(56, 239, 125, 1)' : 'rgba(255, 210, 107, 1)'
       ctx.stroke()
+
+      if (target.hit && target.hitAt) {
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'
+        ctx.font = 'bold 28px Inter, sans-serif'
+        ctx.fillText('+1', target.x - 12, target.y - target.radius - 10)
+      }
     })
 
     if (trail.length > 1) {
       ctx.beginPath()
-      ctx.lineWidth = 6
+      ctx.lineWidth = 8
       ctx.lineCap = 'round'
-      ctx.strokeStyle = 'rgba(0, 214, 255, 0.75)'
+      ctx.strokeStyle = 'rgba(0, 214, 255, 0.85)'
       trail.forEach((point, index) => {
         if (index === 0) {
           ctx.moveTo(point.x, point.y)
@@ -106,7 +116,7 @@ function App() {
       const y = point.y * height
 
       ctx.beginPath()
-      ctx.arc(x, y, index === 8 ? 8 : 4, 0, Math.PI * 2)
+      ctx.arc(x, y, index === 8 ? 9 : 4, 0, Math.PI * 2)
       ctx.fill()
     })
   }
@@ -117,7 +127,7 @@ function App() {
     const height = video?.videoHeight || 1280
     const nextTargets = createTargets(width, height)
     setTargets(nextTargets)
-    setTrackingMeta((prev) => ({ ...prev, score: 0 }))
+    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
   }
 
   const startTracking = async () => {
@@ -167,7 +177,7 @@ function App() {
               const mappedY = primaryPoint.y * height
               trailRef.current = clampTrail(
                 [...trailRef.current, { x: mappedX, y: mappedY, t: performance.now() }],
-                10,
+                12,
               )
 
               const swipe = estimateSwipe(trailRef.current)
@@ -176,7 +186,10 @@ function App() {
 
               nextTargets = detectHits(targets, trailRef.current, slashReady)
               const score = countHits(nextTargets)
-              if (score !== countHits(targets)) {
+              const previousScore = countHits(targets)
+              const didHit = score !== previousScore
+
+              if (didHit) {
                 setTargets(nextTargets)
               }
 
@@ -192,6 +205,7 @@ function App() {
                 slashReady,
                 swipeSpeed,
                 score,
+                lastHitAt: didHit ? Date.now() : trackingMeta.lastHitAt,
               })
             } else {
               trailRef.current = []
@@ -221,13 +235,20 @@ function App() {
     }
   }
 
-  const startCamera = async () => {
+  const startCamera = async (facing = cameraFacing) => {
     try {
+      const mediaDevices = navigator.mediaDevices
+      if (!mediaDevices?.getUserMedia) {
+        throw new Error(
+          'Камера недоступна в этом браузере/контексте. Открой в Safari/Chrome и лучше через HTTPS или localhost.',
+        )
+      }
+
       setTrackingState('starting-camera')
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
+          facingMode: { ideal: facing },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -259,13 +280,19 @@ function App() {
     }
   }
 
+  const toggleCameraFacing = async () => {
+    const nextFacing = cameraFacing === 'user' ? 'environment' : 'user'
+    setCameraFacing(nextFacing)
+    await startCamera(nextFacing)
+  }
+
   const status = useMemo(() => {
     switch (trackingState) {
       case 'idle':
         return {
           label: 'Ожидает запуск',
           tone: 'idle',
-          hint: 'Нажми «Включить камеру», чтобы оживить прототип.',
+          hint: 'Нажми «Включить камеру», затем быстро проведи рукой через цель.',
         }
       case 'starting-camera':
         return {
@@ -277,7 +304,7 @@ function App() {
         return {
           label: 'Камера готова',
           tone: 'ready',
-          hint: 'Теперь можно запускать hand tracking.',
+          hint: 'Теперь запусти tracking и руби цели быстрым движением.',
         }
       case 'loading-model':
         return {
@@ -288,14 +315,14 @@ function App() {
       case 'tracking':
         return trackingMeta.slashReady
           ? {
-              label: 'Slash detected',
+              label: 'РУБИ СЕЙЧАС',
               tone: 'live',
-              hint: 'Уже можно поражать цели траекторией руки.',
+              hint: 'Быстрый взмах рукой через цель даёт попадание.',
             }
           : {
               label: 'Tracking активен',
               tone: 'live',
-              hint: 'Вижу руку — двигайся быстрее, чтобы рубить цели.',
+              hint: 'Сделай более быстрый взмах рукой через кружок.',
             }
       case 'error':
         return {
@@ -306,6 +333,8 @@ function App() {
     }
   }, [trackingState, camera.error, trackingMeta.slashReady])
 
+  const hitGlowActive = Date.now() - trackingMeta.lastHitAt < 220
+
   return (
     <main className="shell">
       <section className="hero-card">
@@ -313,12 +342,12 @@ function App() {
           <span className="eyebrow">VisionPlay / Prototype</span>
           <h1>Игры жестами. Phone-first.</h1>
           <p className="lead">
-            Уже есть первый playable loop: рука, trail, slash signal и цели,
-            которые можно сбивать движением руки.
+            Теперь удар делать проще: задняя камера, более щедрый hitbox и более
+            понятный feedback на попадание.
           </p>
 
           <div className="cta-row">
-            <button className="primary" onClick={startCamera}>
+            <button className="primary" onClick={() => startCamera()}>
               Включить камеру
             </button>
             <button
@@ -328,15 +357,18 @@ function App() {
             >
               Запустить hand tracking
             </button>
+            <button className="secondary" onClick={toggleCameraFacing}>
+              Камера: {cameraFacing === 'environment' ? 'задняя' : 'передняя'}
+            </button>
             <button className="secondary" onClick={resetTargets} disabled={!camera.granted}>
               Сбросить цели
             </button>
           </div>
 
           <ul className="feature-list">
-            <li>Phone-first gameplay</li>
-            <li>Trail + slash signal detection</li>
-            <li>Targets + score loop</li>
+            <li>По умолчанию старт с задней камеры</li>
+            <li>Быстрый взмах рукой через цель = hit</li>
+            <li>Больше hitbox и лучше feedback</li>
           </ul>
         </div>
 
@@ -350,8 +382,10 @@ function App() {
               </div>
             </div>
 
-            <div className={`camera-view ${trackingMeta.slashReady ? 'slash-active' : ''}`}>
-              <video ref={videoRef} className="camera-feed" autoPlay playsInline muted />
+            <div
+              className={`camera-view ${trackingMeta.slashReady ? 'slash-active' : ''} ${hitGlowActive ? 'hit-glow' : ''}`}
+            >
+              <video ref={videoRef} className={`camera-feed ${cameraFacing === 'user' ? 'mirrored' : ''}`} autoPlay playsInline muted />
               <canvas ref={canvasRef} className="tracking-canvas" />
               <div className="video-shade"></div>
               <div className="grid"></div>
@@ -370,8 +404,10 @@ function App() {
               </div>
               <div className="hud bottom-right">
                 {trackingState === 'tracking'
-                  ? `Slash ${trackingMeta.slashReady ? 'ready' : 'waiting'}`
-                  : 'Cast optional'}
+                  ? `Slash ${trackingMeta.slashReady ? 'GO' : 'wait'}`
+                  : cameraFacing === 'environment'
+                    ? 'Back cam'
+                    : 'Front cam'}
               </div>
             </div>
           </div>
@@ -390,12 +426,12 @@ function App() {
         </article>
 
         <article className="panel">
-          <h2>Следующий билд</h2>
+          <h2>Как играть сейчас</h2>
           <ul>
-            <li>Сглаживание и debounce slash</li>
-            <li>Анимация появления целей</li>
-            <li>Feedback effects on hit</li>
-            <li>Полный Fruit Ninja-like loop</li>
+            <li>Включи камеру</li>
+            <li>Запусти hand tracking</li>
+            <li>Наведи руку в кадр</li>
+            <li>Быстро проведи рукой через цель</li>
           </ul>
         </article>
       </section>
