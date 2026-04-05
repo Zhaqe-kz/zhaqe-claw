@@ -343,17 +343,16 @@ function App() {
   const hitGlowActive = Date.now() - trackingMeta.lastHitAt < 220
 
   return (
-    <main className="shell">
-      <section className="hero-card">
-        <div className="hero-copy">
-          <span className="eyebrow">VisionPlay / Prototype</span>
-          <h1>Игры жестами. Phone-first.</h1>
-          <p className="lead">
-            Теперь счёт event-based, цели респавнятся в новых местах, а большой
-            кружок — это просто маркер твоей руки, чтобы было видно, где система видит палец.
-          </p>
+    <main className="app-shell">
+      <section className="game-stage">
+        <div className="game-topbar">
+          <div className="brand-block">
+            <span className="eyebrow">VisionPlay / Slash Mode</span>
+            <h1>Режь цели рукой</h1>
+            <p>{status.hint}</p>
+          </div>
 
-          <div className="cta-row">
+          <div className="controls-block">
             <button className="primary" onClick={() => startCamera()}>
               Включить камеру
             </button>
@@ -371,39 +370,20 @@ function App() {
               Сбросить цели
             </button>
           </div>
-
-          <ul className="feature-list">
-            <li>Счёт теперь не сбрасывается после +1</li>
-            <li>Цели появляются в новых местах</li>
-            <li>Большой круг = маркер руки, не цель</li>
-          </ul>
-
-          <div className="instruction-box">
-            <strong>Как играть:</strong>
-            <ol>
-              <li>Нажми «Включить камеру»</li>
-              <li>Нажми «Запустить hand tracking»</li>
-              <li>Большой голубой круг — это твоя рука</li>
-              <li>Маленькие оранжевые круги — это цели</li>
-              <li>Быстро проведи рукой через маленькую цель, чтобы получить +1</li>
-            </ol>
-          </div>
         </div>
 
-        <div className="phone-stage">
-          <div className="phone-frame">
-            <div className="camera-status">
-              <span className={`dot ${status.tone}`}></span>
-              <div>
-                <strong>{status.label}</strong>
-                <p>{status.hint}</p>
-              </div>
-            </div>
-
+        <div className="game-layout">
+          <div className="game-canvas-wrap">
             <div
-              className={`camera-view ${trackingMeta.slashReady ? 'slash-active' : ''} ${hitGlowActive ? 'hit-glow' : ''}`}
+              className={`game-canvas ${trackingMeta.slashReady ? 'slash-active' : ''} ${hitGlowActive ? 'hit-glow' : ''}`}
             >
-              <video ref={videoRef} className={`camera-feed ${cameraFacing === 'user' ? 'mirrored' : ''}`} autoPlay playsInline muted />
+              <video
+                ref={videoRef}
+                className={`camera-feed ${cameraFacing === 'user' ? 'mirrored' : ''}`}
+                autoPlay
+                playsInline
+                muted
+              />
               <canvas ref={canvasRef} className="tracking-canvas" />
               <div className="video-shade"></div>
               <div className="grid"></div>
@@ -411,16 +391,11 @@ function App() {
                 className={`hand-marker ${trackingState}`}
                 style={{ left: `${markerPoint.x}%`, top: `${markerPoint.y}%` }}
               ></div>
-              <div className="hud top-left">
-                Hands: {trackingMeta.handsDetected || 0}
-              </div>
-              <div className="hud top-right">
-                Score: {trackingMeta.score}
-              </div>
-              <div className="hud bottom-left">
-                Speed: {trackingMeta.swipeSpeed}px/s
-              </div>
-              <div className="hud bottom-right">
+
+              <div className="hud hud-score">Score: {trackingMeta.score}</div>
+              <div className="hud hud-hands">Hands: {trackingMeta.handsDetected || 0}</div>
+              <div className="hud hud-speed">Speed: {trackingMeta.swipeSpeed}px/s</div>
+              <div className="hud hud-slash">
                 {trackingState === 'tracking'
                   ? `Slash ${trackingMeta.slashReady ? 'GO' : 'wait'}`
                   : cameraFacing === 'environment'
@@ -429,29 +404,38 @@ function App() {
               </div>
             </div>
           </div>
+
+          <aside className="side-panel">
+            <div className="status-card">
+              <span className={`dot ${status.tone}`}></span>
+              <div>
+                <strong>{status.label}</strong>
+                <p>{status.hint}</p>
+              </div>
+            </div>
+
+            <div className="instruction-box compact">
+              <strong>Как играть:</strong>
+              <ol>
+                <li>Включи камеру</li>
+                <li>Запусти hand tracking</li>
+                <li>Большой голубой круг — это твоя рука</li>
+                <li>Маленькие оранжевые круги — цели</li>
+                <li>Быстро проведи рукой через цель</li>
+              </ol>
+            </div>
+
+            <div className="info-card">
+              <h2>Что уже есть</h2>
+              <ul>
+                <li>MediaPipe hand tracking</li>
+                <li>Canvas overlay + trail</li>
+                <li>Event-based score</li>
+                <li>Respawn targets</li>
+              </ul>
+            </div>
+          </aside>
         </div>
-      </section>
-
-      <section className="info-grid">
-        <article className="panel">
-          <h2>Что уже есть</h2>
-          <ul>
-            <li>Live camera permission flow</li>
-            <li>MediaPipe hand tracking</li>
-            <li>Canvas overlay + trail</li>
-            <li>Event-based score + respawn targets</li>
-          </ul>
-        </article>
-
-        <article className="panel">
-          <h2>Как играть сейчас</h2>
-          <ul>
-            <li>Включи камеру</li>
-            <li>Запусти hand tracking</li>
-            <li>Большой круг = твоя рука</li>
-            <li>Быстро проведи рукой через маленькие цели</li>
-          </ul>
-        </article>
       </section>
     </main>
   )
