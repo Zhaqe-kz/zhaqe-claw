@@ -74,6 +74,8 @@ function App() {
     ctx.clearRect(0, 0, width, height)
 
     sceneTargets.forEach((target) => {
+      const fade = target.hit && target.hitAt ? Math.max(0, 1 - (Date.now() - target.hitAt) / 380) : 1
+      ctx.globalAlpha = fade
       ctx.beginPath()
       ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2)
       ctx.fillStyle = target.hit ? 'rgba(56, 239, 125, 0.5)' : 'rgba(255, 180, 70, 0.34)'
@@ -87,6 +89,7 @@ function App() {
         ctx.font = 'bold 28px Inter, sans-serif'
         ctx.fillText('+1', target.x - 12, target.y - target.radius - 10)
       }
+      ctx.globalAlpha = 1
     })
 
     if (trail.length > 1) {
@@ -189,8 +192,8 @@ function App() {
               const didHit = nextHits > previousHits
 
               nextTargets = hitScannedTargets.map((target) => {
-                if (target.hit && target.hitAt && Date.now() - target.hitAt > 260) {
-                  return respawnTarget(width, height)
+                if (target.hit && target.hitAt && Date.now() - target.hitAt > 420) {
+                  return respawnTarget(target, width, height)
                 }
                 return target
               })
@@ -324,7 +327,7 @@ function App() {
           ? {
               label: 'РУБИ СЕЙЧАС',
               tone: 'live',
-              hint: 'Быстрый взмах рукой через цель даёт +1, затем цель появляется в новом месте.',
+              hint: 'После попадания цель исчезает и затем появляется в новом месте.',
             }
           : {
               label: 'Tracking активен',

@@ -9,24 +9,39 @@ export type Target = {
   hitAt?: number
 }
 
-export function createTargets(width: number, height: number, count = 3): Target[] {
-  const safeWidth = Math.max(width, 320)
-  const safeHeight = Math.max(height, 480)
-
-  return Array.from({ length: count }, (_, index) => ({
-    id: Date.now() + index,
-    x: safeWidth * (0.18 + Math.random() * 0.64),
-    y: safeHeight * (0.22 + Math.random() * 0.46),
-    radius: 44,
-    hit: false,
-  }))
-}
-
-export function respawnTarget(width: number, height: number): Target {
+function randomPosition(width: number, height: number) {
   return {
-    id: Date.now() + Math.floor(Math.random() * 1000),
     x: Math.max(width, 320) * (0.18 + Math.random() * 0.64),
     y: Math.max(height, 480) * (0.22 + Math.random() * 0.46),
+  }
+}
+
+export function createTargets(width: number, height: number, count = 3): Target[] {
+  return Array.from({ length: count }, (_, index) => {
+    const pos = randomPosition(width, height)
+    return {
+      id: Date.now() + index,
+      x: pos.x,
+      y: pos.y,
+      radius: 44,
+      hit: false,
+    }
+  })
+}
+
+export function respawnTarget(prev: Target, width: number, height: number): Target {
+  let next = randomPosition(width, height)
+  let tries = 0
+
+  while (Math.hypot(next.x - prev.x, next.y - prev.y) < 140 && tries < 12) {
+    next = randomPosition(width, height)
+    tries += 1
+  }
+
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    x: next.x,
+    y: next.y,
     radius: 44,
     hit: false,
   }
