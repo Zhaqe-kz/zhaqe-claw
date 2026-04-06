@@ -27,6 +27,8 @@ type MarkerPoint = {
 
 type CameraFacing = 'user' | 'environment'
 
+const ROUND_SECONDS = 30
+
 function App() {
   const [trackingState, setTrackingState] = useState<TrackingState>('idle')
   const [cameraFacing, setCameraFacing] = useState<CameraFacing>('environment')
@@ -37,6 +39,8 @@ function App() {
   })
   const [markerPoint, setMarkerPoint] = useState<MarkerPoint>({ x: 38, y: 62 })
   const [targets, setTargets] = useState<Target[]>([])
+  const [gameRunning, setGameRunning] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS)
   const [trackingMeta, setTrackingMeta] = useState({
     handsDetected: 0,
     fpsHint: '—',
@@ -62,6 +66,22 @@ function App() {
       streamRef.current?.getTracks().forEach((track) => track.stop())
     }
   }, [])
+
+  useEffect(() => {
+    if (!gameRunning) return
+
+    const timer = window.setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          setGameRunning(false)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [gameRunning])
 
   const drawScene = (
     ctx: CanvasRenderingContext2D,
@@ -130,6 +150,18 @@ function App() {
     const height = video?.videoHeight || 1280
     setTargets(createTargets(width, height))
     setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
+    setTimeLeft(ROUND_SECONDS)
+    setGameRunning(false)
+  }
+
+  const startRound = () => {
+    const video = videoRef.current
+    const width = video?.videoWidth || 720
+    const height = video?.videoHeight || 1280
+    setTargets(createTargets(width, height))
+    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
+    setTimeLeft(ROUND_SECONDS)
+    setGameRunning(true)
   }
 
   const startTracking = async () => {
@@ -186,36 +218,47 @@ function App() {
               slashReady = swipe.isSlash
               swipeSpeed = Math.round(swipe.speed)
 
-              const hitScannedTargets = detectHits(targets, trailRef.current, slashReady)
-              const previousHits = targets.filter((target) => target.hit).length
-              const nextHits = hitScannedTargets.filter((target) => target.hit).length
-              const didHit = nextHits > previousHits
+              if (gameRunning) {
+                const hitScannedTargets = detectHits(targets, trailRef.current, slashReady)
+                const previousHits = targets.filter((target) => target.hit).length
+                const nextHits = hitScannedTargets.filter((target) => target.hit).length
+                const didHit = nextHits > previousHits
 
-              nextTargets = hitScannedTargets.map((target) => {
-                if (target.hit && target.hitAt && Date.now() - target.hitAt > 420) {
-                  return respawnTarget(target, width, height)
+                nextTargets = hitScannedTargets.map((target) => {
+                  if (target.hit && target.hitAt && Date.now() - target.hitAt > 420) {
+                    return respawnTarget(target, width, height)
+                  }
+                  return target
+                })
+
+                if (didHit || nextTargets !== targets) {
+                  setTargets(nextTargets)
                 }
-                return target
-              })
 
-              if (didHit || nextTargets !== targets) {
-                setTargets(nextTargets)
+                setTrackingMeta((prev) => ({
+                  handsDetected: result.handednesses.length,
+                  fpsHint: 'live',
+                  modelReady: true,
+                  slashReady,
+                  swipeSpeed,
+                  score: didHit ? prev.score + 1 : prev.score,
+                  lastHitAt: didHit ? Date.now() : prev.lastHitAt,
+                }))
+              } else {
+                setTrackingMeta((prev) => ({
+                  ...prev,
+                  handsDetected: result.handednesses.length,
+                  fpsHint: 'live',
+                  modelReady: true,
+                  slashReady,
+                  swipeSpeed,
+                }))
               }
 
               setMarkerPoint({
                 x: (1 - primaryPoint.x) * 100,
                 y: primaryPoint.y * 100,
               })
-
-              setTrackingMeta((prev) => ({
-                handsDetected: result.handednesses.length,
-                fpsHint: 'live',
-                modelReady: true,
-                slashReady,
-                swipeSpeed,
-                score: didHit ? prev.score + 1 : prev.score,
-                lastHitAt: didHit ? Date.now() : prev.lastHitAt,
-              }))
             } else {
               trailRef.current = []
               setTrackingMeta((prev) => ({
@@ -297,6 +340,14 @@ function App() {
   }
 
   const status = useMemo(() => {
+    if (!gameRunning && timeLeft === 0) {
+      return {
+        label: 'Раунд окончен',
+        tone: 'ready',
+        hint: `Финальный счёт: ${trackingMeta.score}. Нажми «Старт раунда», чтобы сыграть ещё раз.`,
+      }
+    }
+
     switch (trackingState) {
       case 'idle':
         return {
@@ -314,7 +365,7 @@ function App() {
         return {
           label: 'Камера готова',
           tone: 'ready',
-          hint: 'Теперь запусти tracking и руби цели быстрым движением.',
+          hint: 'Теперь запусти tracking и начни раунд.',
         }
       case 'loading-model':
         return {
@@ -327,12 +378,16 @@ function App() {
           ? {
               label: 'РУБИ СЕЙЧАС',
               tone: 'live',
-              hint: 'После попадания цель исчезает и затем появляется в новом месте.',
+              hint: gameRunning
+                ? 'Быстрый взмах рукой через цель даёт +1.'
+                : 'Tracking активен. Нажми «Старт раунда», чтобы начать игру.',
             }
           : {
-              label: 'Tracking активен',
+              label: gameRunning ? 'Tracking активен' : 'Готов к игре',
               tone: 'live',
-              hint: 'Сделай более быстрый взмах рукой через кружок.',
+              hint: gameRunning
+                ? 'Сделай более быстрый взмах рукой через кружок.'
+                : 'Нажми «Старт раунда», чтобы начать.',
             }
       case 'error':
         return {
@@ -341,7 +396,7 @@ function App() {
           hint: camera.error ?? 'Не удалось поднять tracking.',
         }
     }
-  }, [trackingState, camera.error, trackingMeta.slashReady])
+  }, [trackingState, camera.error, trackingMeta.slashReady, trackingMeta.score, gameRunning, timeLeft])
 
   const hitGlowActive = Date.now() - trackingMeta.lastHitAt < 220
 
@@ -366,11 +421,14 @@ function App() {
             >
               Запустить hand tracking
             </button>
+            <button className="secondary" onClick={startRound} disabled={!camera.granted}>
+              {timeLeft === 0 ? 'Играть ещё' : 'Старт раунда'}
+            </button>
             <button className="secondary" onClick={toggleCameraFacing}>
               Камера: {cameraFacing === 'environment' ? 'задняя' : 'передняя'}
             </button>
             <button className="secondary" onClick={resetTargets} disabled={!camera.granted}>
-              Сбросить цели
+              Сбросить
             </button>
           </div>
         </div>
@@ -398,13 +456,7 @@ function App() {
               <div className="hud hud-score">Score: {trackingMeta.score}</div>
               <div className="hud hud-hands">Hands: {trackingMeta.handsDetected || 0}</div>
               <div className="hud hud-speed">Speed: {trackingMeta.swipeSpeed}px/s</div>
-              <div className="hud hud-slash">
-                {trackingState === 'tracking'
-                  ? `Slash ${trackingMeta.slashReady ? 'GO' : 'wait'}`
-                  : cameraFacing === 'environment'
-                    ? 'Back cam'
-                    : 'Front cam'}
-              </div>
+              <div className="hud hud-slash">Time: {timeLeft}s</div>
             </div>
           </div>
 
@@ -422,19 +474,19 @@ function App() {
               <ol>
                 <li>Включи камеру</li>
                 <li>Запусти hand tracking</li>
+                <li>Нажми «Старт раунда»</li>
                 <li>Большой голубой круг — это твоя рука</li>
-                <li>Маленькие оранжевые круги — цели</li>
-                <li>Быстро проведи рукой через цель</li>
+                <li>Быстро проведи рукой через цель за 30 секунд</li>
               </ol>
             </div>
 
             <div className="info-card">
               <h2>Что уже есть</h2>
               <ul>
-                <li>MediaPipe hand tracking</li>
-                <li>Canvas overlay + trail</li>
+                <li>Раунд на 30 секунд</li>
                 <li>Event-based score</li>
                 <li>Respawn targets</li>
+                <li>Large game layout</li>
               </ul>
             </div>
           </aside>
