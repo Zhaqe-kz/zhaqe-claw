@@ -7,6 +7,7 @@ export type Target = {
   radius: number
   hit: boolean
   hitAt?: number
+  pulseOffset: number
 }
 
 function randomPosition(width: number, height: number) {
@@ -16,17 +17,20 @@ function randomPosition(width: number, height: number) {
   }
 }
 
+function createTarget(width: number, height: number, idSeed: number): Target {
+  const pos = randomPosition(width, height)
+  return {
+    id: idSeed,
+    x: pos.x,
+    y: pos.y,
+    radius: 44,
+    hit: false,
+    pulseOffset: Math.random() * Math.PI * 2,
+  }
+}
+
 export function createTargets(width: number, height: number, count = 3): Target[] {
-  return Array.from({ length: count }, (_, index) => {
-    const pos = randomPosition(width, height)
-    return {
-      id: Date.now() + index,
-      x: pos.x,
-      y: pos.y,
-      radius: 44,
-      hit: false,
-    }
-  })
+  return Array.from({ length: count }, (_, index) => createTarget(width, height, Date.now() + index))
 }
 
 export function respawnTarget(prev: Target, width: number, height: number): Target {
@@ -44,6 +48,7 @@ export function respawnTarget(prev: Target, width: number, height: number): Targ
     y: next.y,
     radius: 44,
     hit: false,
+    pulseOffset: Math.random() * Math.PI * 2,
   }
 }
 

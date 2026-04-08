@@ -50,6 +50,8 @@ function App() {
     score: 0,
     lastHitAt: 0,
     bestScore: 0,
+    combo: 0,
+    comboFlashAt: 0,
   })
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -96,9 +98,10 @@ function App() {
 
     sceneTargets.forEach((target) => {
       const fade = target.hit && target.hitAt ? Math.max(0, 1 - (Date.now() - target.hitAt) / 380) : 1
+      const pulse = 1 + Math.sin(Date.now() / 220 + target.pulseOffset) * 0.08
       ctx.globalAlpha = fade
       ctx.beginPath()
-      ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2)
+      ctx.arc(target.x, target.y, target.radius * pulse, 0, Math.PI * 2)
       ctx.fillStyle = target.hit ? 'rgba(56, 239, 125, 0.5)' : 'rgba(255, 180, 70, 0.34)'
       ctx.fill()
       ctx.lineWidth = 4
@@ -150,7 +153,7 @@ function App() {
     const width = video?.videoWidth || 720
     const height = video?.videoHeight || 1280
     setTargets(createTargets(width, height))
-    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
+    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0, combo: 0 }))
     setTimeLeft(ROUND_SECONDS)
     setGameRunning(false)
   }
@@ -160,7 +163,7 @@ function App() {
     const width = video?.videoWidth || 720
     const height = video?.videoHeight || 1280
     setTargets(createTargets(width, height))
-    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0 }))
+    setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0, combo: 0 }))
     setTimeLeft(ROUND_SECONDS)
     setGameRunning(true)
   }
@@ -238,6 +241,7 @@ function App() {
 
                 setTrackingMeta((prev) => {
                   const nextScore = didHit ? prev.score + 1 : prev.score
+                  const nextCombo = didHit ? prev.combo + 1 : 0
                   return {
                     handsDetected: result.handednesses.length,
                     fpsHint: 'live',
@@ -247,6 +251,8 @@ function App() {
                     score: nextScore,
                     lastHitAt: didHit ? Date.now() : prev.lastHitAt,
                     bestScore: Math.max(prev.bestScore, nextScore),
+                    combo: nextCombo,
+                    comboFlashAt: didHit ? Date.now() : prev.comboFlashAt,
                   }
                 })
               } else {
@@ -271,6 +277,7 @@ function App() {
                 handsDetected: 0,
                 slashReady: false,
                 swipeSpeed: 0,
+                combo: gameRunning ? 0 : prev.combo,
               }))
             }
 
@@ -381,7 +388,7 @@ function App() {
       case 'tracking':
         return trackingMeta.slashReady
           ? {
-              label: 'РУБИ СЕЙЧАС',
+              label: trackingMeta.combo >= 3 ? `КОМБО x${trackingMeta.combo}` : 'РУБИ СЕЙЧАС',
               tone: 'live',
               hint: gameRunning
                 ? 'Быстрый взмах рукой через цель даёт +1.'
@@ -401,9 +408,10 @@ function App() {
           hint: camera.error ?? 'Не удалось поднять tracking.',
         }
     }
-  }, [trackingState, camera.error, trackingMeta.slashReady, trackingMeta.score, trackingMeta.bestScore, gameRunning, timeLeft])
+  }, [trackingState, camera.error, trackingMeta.slashReady, trackingMeta.score, trackingMeta.bestScore, trackingMeta.combo, gameRunning, timeLeft])
 
   const hitGlowActive = Date.now() - trackingMeta.lastHitAt < 220
+  const comboGlowActive = Date.now() - trackingMeta.comboFlashAt < 260 && trackingMeta.combo >= 2
   const showRoundEnd = !gameRunning && timeLeft === 0
 
   return (
@@ -442,7 +450,7 @@ function App() {
         <div className="game-layout">
           <div className="game-canvas-wrap">
             <div
-              className={`game-canvas ${trackingMeta.slashReady ? 'slash-active' : ''} ${hitGlowActive ? 'hit-glow' : ''}`}
+              className={`game-canvas ${trackingMeta.slashReady ? 'slash-active' : ''} ${hitGlowActive ? 'hit-glow' : ''} ${comboGlowActive ? 'combo-glow' : ''}`}
             >
               <video
                 ref={videoRef}
@@ -463,6 +471,7 @@ function App() {
               <div className="hud hud-hands">Best: {trackingMeta.bestScore}</div>
               <div className="hud hud-speed">Speed: {trackingMeta.swipeSpeed}px/s</div>
               <div className="hud hud-slash">Time: {timeLeft}s</div>
+              {trackingMeta.combo >= 2 ? <div className="combo-badge">Combo x{trackingMeta.combo}</div> : null}
 
               {showRoundEnd ? (
                 <div className="round-overlay">
@@ -500,10 +509,10 @@ function App() {
             <div className="info-card">
               <h2>Что уже есть</h2>
               <ul>
-                <li>Раунд на 30 секунд</li>
-                <li>Финальный экран раунда</li>
+                <li>Pulse-анимация целей</li>
+                <li>Combo-счётчик</li>
                 <li>Best score</li>
-                <li>Large game layout</li>
+                <li>Round overlay</li>
               </ul>
             </div>
           </aside>
