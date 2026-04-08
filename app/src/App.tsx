@@ -49,6 +49,7 @@ function App() {
     swipeSpeed: 0,
     score: 0,
     lastHitAt: 0,
+    bestScore: 0,
   })
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -235,15 +236,19 @@ function App() {
                   setTargets(nextTargets)
                 }
 
-                setTrackingMeta((prev) => ({
-                  handsDetected: result.handednesses.length,
-                  fpsHint: 'live',
-                  modelReady: true,
-                  slashReady,
-                  swipeSpeed,
-                  score: didHit ? prev.score + 1 : prev.score,
-                  lastHitAt: didHit ? Date.now() : prev.lastHitAt,
-                }))
+                setTrackingMeta((prev) => {
+                  const nextScore = didHit ? prev.score + 1 : prev.score
+                  return {
+                    handsDetected: result.handednesses.length,
+                    fpsHint: 'live',
+                    modelReady: true,
+                    slashReady,
+                    swipeSpeed,
+                    score: nextScore,
+                    lastHitAt: didHit ? Date.now() : prev.lastHitAt,
+                    bestScore: Math.max(prev.bestScore, nextScore),
+                  }
+                })
               } else {
                 setTrackingMeta((prev) => ({
                   ...prev,
@@ -344,7 +349,7 @@ function App() {
       return {
         label: 'Раунд окончен',
         tone: 'ready',
-        hint: `Финальный счёт: ${trackingMeta.score}. Нажми «Старт раунда», чтобы сыграть ещё раз.`,
+        hint: `Счёт: ${trackingMeta.score}. Лучший: ${trackingMeta.bestScore}. Нажми «Играть ещё».`,
       }
     }
 
@@ -396,9 +401,10 @@ function App() {
           hint: camera.error ?? 'Не удалось поднять tracking.',
         }
     }
-  }, [trackingState, camera.error, trackingMeta.slashReady, trackingMeta.score, gameRunning, timeLeft])
+  }, [trackingState, camera.error, trackingMeta.slashReady, trackingMeta.score, trackingMeta.bestScore, gameRunning, timeLeft])
 
   const hitGlowActive = Date.now() - trackingMeta.lastHitAt < 220
+  const showRoundEnd = !gameRunning && timeLeft === 0
 
   return (
     <main className="app-shell">
@@ -454,9 +460,20 @@ function App() {
               ></div>
 
               <div className="hud hud-score">Score: {trackingMeta.score}</div>
-              <div className="hud hud-hands">Hands: {trackingMeta.handsDetected || 0}</div>
+              <div className="hud hud-hands">Best: {trackingMeta.bestScore}</div>
               <div className="hud hud-speed">Speed: {trackingMeta.swipeSpeed}px/s</div>
               <div className="hud hud-slash">Time: {timeLeft}s</div>
+
+              {showRoundEnd ? (
+                <div className="round-overlay">
+                  <div className="round-card">
+                    <span className="eyebrow">Round Complete</span>
+                    <h2>{trackingMeta.score}</h2>
+                    <p>Лучший счёт: {trackingMeta.bestScore}</p>
+                    <button className="primary" onClick={startRound}>Играть ещё</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -484,8 +501,8 @@ function App() {
               <h2>Что уже есть</h2>
               <ul>
                 <li>Раунд на 30 секунд</li>
-                <li>Event-based score</li>
-                <li>Respawn targets</li>
+                <li>Финальный экран раунда</li>
+                <li>Best score</li>
                 <li>Large game layout</li>
               </ul>
             </div>
