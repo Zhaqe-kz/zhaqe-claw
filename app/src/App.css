@@ -259,6 +259,11 @@ h1 {
   bottom: 18px;
 }
 
+.hud-difficulty {
+  right: 18px;
+  top: 70px;
+}
+
 .combo-badge {
   position: absolute;
   top: 70px;

@@ -86,6 +86,11 @@ function App() {
     return () => window.clearInterval(timer)
   }, [gameRunning])
 
+  const difficultyRadius = useMemo(() => {
+    const progress = (ROUND_SECONDS - timeLeft) / ROUND_SECONDS
+    return Math.max(28, Math.round(44 - progress * 12))
+  }, [timeLeft])
+
   const drawScene = (
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -152,7 +157,7 @@ function App() {
     const video = videoRef.current
     const width = video?.videoWidth || 720
     const height = video?.videoHeight || 1280
-    setTargets(createTargets(width, height))
+    setTargets(createTargets(width, height, 3, 44))
     setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0, combo: 0 }))
     setTimeLeft(ROUND_SECONDS)
     setGameRunning(false)
@@ -162,7 +167,7 @@ function App() {
     const video = videoRef.current
     const width = video?.videoWidth || 720
     const height = video?.videoHeight || 1280
-    setTargets(createTargets(width, height))
+    setTargets(createTargets(width, height, 3, 44))
     setTrackingMeta((prev) => ({ ...prev, score: 0, lastHitAt: 0, combo: 0 }))
     setTimeLeft(ROUND_SECONDS)
     setGameRunning(true)
@@ -198,7 +203,7 @@ function App() {
           }
 
           if (targets.length === 0) {
-            setTargets(createTargets(width, height))
+            setTargets(createTargets(width, height, 3, difficultyRadius))
           }
 
           if (video.currentTime !== lastVideoTimeRef.current) {
@@ -230,7 +235,7 @@ function App() {
 
                 nextTargets = hitScannedTargets.map((target) => {
                   if (target.hit && target.hitAt && Date.now() - target.hitAt > 420) {
-                    return respawnTarget(target, width, height)
+                    return respawnTarget(target, width, height, difficultyRadius)
                   }
                   return target
                 })
@@ -335,7 +340,7 @@ function App() {
         width: video.videoWidth,
         height: video.videoHeight,
       })
-      setTargets(createTargets(video.videoWidth || 720, video.videoHeight || 1280))
+      setTargets(createTargets(video.videoWidth || 720, video.videoHeight || 1280, 3, 44))
       setTrackingMeta((prev) => ({ ...prev, score: 0 }))
       setTrackingState('camera-ready')
     } catch (error) {
@@ -471,6 +476,7 @@ function App() {
               <div className="hud hud-hands">Best: {trackingMeta.bestScore}</div>
               <div className="hud hud-speed">Speed: {trackingMeta.swipeSpeed}px/s</div>
               <div className="hud hud-slash">Time: {timeLeft}s</div>
+              <div className="hud hud-difficulty">Target size: {difficultyRadius}</div>
               {trackingMeta.combo >= 2 ? <div className="combo-badge">Combo x{trackingMeta.combo}</div> : null}
 
               {showRoundEnd ? (
@@ -502,16 +508,16 @@ function App() {
                 <li>Запусти hand tracking</li>
                 <li>Нажми «Старт раунда»</li>
                 <li>Большой голубой круг — это твоя рука</li>
-                <li>Быстро проведи рукой через цель за 30 секунд</li>
+                <li>Цели постепенно уменьшаются по ходу раунда</li>
               </ol>
             </div>
 
             <div className="info-card">
               <h2>Что уже есть</h2>
               <ul>
+                <li>Difficulty scaling</li>
                 <li>Pulse-анимация целей</li>
                 <li>Combo-счётчик</li>
-                <li>Best score</li>
                 <li>Round overlay</li>
               </ul>
             </div>

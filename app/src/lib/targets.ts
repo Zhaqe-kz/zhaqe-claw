@@ -17,23 +17,25 @@ function randomPosition(width: number, height: number) {
   }
 }
 
-function createTarget(width: number, height: number, idSeed: number): Target {
+function createTarget(width: number, height: number, idSeed: number, radius: number): Target {
   const pos = randomPosition(width, height)
   return {
     id: idSeed,
     x: pos.x,
     y: pos.y,
-    radius: 44,
+    radius,
     hit: false,
     pulseOffset: Math.random() * Math.PI * 2,
   }
 }
 
-export function createTargets(width: number, height: number, count = 3): Target[] {
-  return Array.from({ length: count }, (_, index) => createTarget(width, height, Date.now() + index))
+export function createTargets(width: number, height: number, count = 3, radius = 44): Target[] {
+  return Array.from({ length: count }, (_, index) =>
+    createTarget(width, height, Date.now() + index, radius),
+  )
 }
 
-export function respawnTarget(prev: Target, width: number, height: number): Target {
+export function respawnTarget(prev: Target, width: number, height: number, radius = prev.radius): Target {
   let next = randomPosition(width, height)
   let tries = 0
 
@@ -46,7 +48,7 @@ export function respawnTarget(prev: Target, width: number, height: number): Targ
     id: Date.now() + Math.floor(Math.random() * 1000),
     x: next.x,
     y: next.y,
-    radius: 44,
+    radius,
     hit: false,
     pulseOffset: Math.random() * Math.PI * 2,
   }
